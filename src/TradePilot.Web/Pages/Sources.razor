@@ -1,0 +1,63 @@
+@page "/sources"
+@inject IMtApiClient ApiClient
+
+<PageTitle>Sources</PageTitle>
+
+<h1>Sources</h1>
+
+@if (_isLoading)
+{
+    <p>Loading sources...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+else if (_sources.Count == 0)
+{
+    <p>No sources found yet.</p>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Source ID</th>
+                <th>Last Snapshot (UTC)</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var source in _sources)
+            {
+                <tr>
+                    <td>@source.SourceId</td>
+                    <td>@source.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@code {
+    private readonly List<MtSourceSummary> _sources = [];
+    private bool _isLoading = true;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var sources = await ApiClient.GetSourcesAsync();
+            _sources.Clear();
+            _sources.AddRange(sources);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load sources: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
