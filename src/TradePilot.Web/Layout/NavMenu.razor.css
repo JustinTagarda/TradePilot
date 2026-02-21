@@ -29,6 +29,10 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-list-ul' viewBox='0 0 16 16'%3E%3Cpath fill-rule='evenodd' d='M5 11.5a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5zm0-4a.5.5 0 0 1 .5-.5h8a.5.5 0 0 1 0 1h-8a.5.5 0 0 1-.5-.5z'/%3E%3Cpath d='M2 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0-4a1 1 0 1 0 0-2 1 1 0 0 0 0 2zm0-4a1 1 0 1 0 0-2 1 1 0 0 0 0 2z'/%3E%3C/svg%3E");
 }
 
+.bi-grid-nav-menu {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='white' class='bi bi-grid-3x3-gap-fill' viewBox='0 0 16 16'%3E%3Cpath d='M1 2a1 1 0 0 1 1-1h2.667a1 1 0 0 1 1 1v2.667a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V2zm0 5.667a1 1 0 0 1 1-1h2.667a1 1 0 0 1 1 1v2.666a1 1 0 0 1-1 1H2a1 1 0 0 1-1-1V7.667zM7.333 2a1 1 0 0 1 1-1H11a1 1 0 0 1 1 1v2.667a1 1 0 0 1-1 1H8.333a1 1 0 0 1-1-1V2zm0 5.667a1 1 0 0 1 1-1H11a1 1 0 0 1 1 1v2.666a1 1 0 0 1-1 1H8.333a1 1 0 0 1-1-1V7.667zM13.667 2a1 1 0 0 1 1-1h.333a1 1 0 0 1 1 1v2.667a1 1 0 0 1-1 1h-.333a1 1 0 0 1-1-1V2zm0 5.667a1 1 0 0 1 1-1h.333a1 1 0 0 1 1 1v2.666a1 1 0 0 1-1 1h-.333a1 1 0 0 1-1-1V7.667z'/%3E%3C/svg%3E");
+}
+
 .nav-item {
     font-size: 0.9rem;
     padding-bottom: 0.5rem;

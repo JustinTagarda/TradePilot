@@ -1,0 +1,165 @@
+@page "/dashboard"
+@page "/dashboard/{SourceId}"
+@inject IMtApiClient ApiClient
+
+<PageTitle>Dashboard</PageTitle>
+
+<h1>Dashboard</h1>
+
+@if (string.IsNullOrWhiteSpace(SourceId))
+{
+    <p>Select a source from the <a href="/sources">Sources</a> page.</p>
+}
+else if (_isLoading)
+{
+    <p>Loading latest snapshot for <strong>@SourceId</strong>...</p>
+}
+else if (!string.IsNullOrWhiteSpace(_error))
+{
+    <div class="alert alert-danger" role="alert">@_error</div>
+}
+else if (_snapshot is null)
+{
+    <p>No snapshot available for source <strong>@SourceId</strong>.</p>
+}
+else
+{
+    <section class="mb-4">
+        <h2>Account</h2>
+        <table class="table table-sm">
+            <tbody>
+                <tr><th>Source ID</th><td>@_snapshot.SourceId</td></tr>
+                <tr><th>Last Update (UTC)</th><td>@_snapshot.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss")</td></tr>
+                <tr><th>Broker</th><td>@_snapshot.Account.Broker</td></tr>
+                <tr><th>Server</th><td>@_snapshot.Account.Server</td></tr>
+                <tr><th>Login</th><td>@_snapshot.Account.Login</td></tr>
+                <tr><th>Currency</th><td>@_snapshot.Account.Currency</td></tr>
+                <tr><th>Balance</th><td>@_snapshot.Account.Balance</td></tr>
+                <tr><th>Equity</th><td>@_snapshot.Account.Equity</td></tr>
+                <tr><th>Margin</th><td>@_snapshot.Account.Margin</td></tr>
+                <tr><th>Free Margin</th><td>@_snapshot.Account.FreeMargin</td></tr>
+                <tr><th>Margin Level</th><td>@_snapshot.Account.MarginLevel</td></tr>
+            </tbody>
+        </table>
+    </section>
+
+    <section class="mb-4">
+        <h2>Positions (@_snapshot.Positions.Count)</h2>
+        @if (_snapshot.Positions.Count == 0)
+        {
+            <p>No open positions.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Symbol</th>
+                            <th>Side</th>
+                            <th>Volume</th>
+                            <th>Open</th>
+                            <th>SL</th>
+                            <th>TP</th>
+                            <th>Current</th>
+                            <th>Profit</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var position in _snapshot.Positions)
+                        {
+                            <tr>
+                                <td>@position.Ticket</td>
+                                <td>@position.Symbol</td>
+                                <td>@position.Side</td>
+                                <td>@position.Volume</td>
+                                <td>@position.OpenPrice</td>
+                                <td>@position.StopLoss</td>
+                                <td>@position.TakeProfit</td>
+                                <td>@position.CurrentPrice</td>
+                                <td>@position.Profit</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+
+    <section>
+        <h2>Orders (@_snapshot.Orders.Count)</h2>
+        @if (_snapshot.Orders.Count == 0)
+        {
+            <p>No pending orders.</p>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-striped table-sm">
+                    <thead>
+                        <tr>
+                            <th>Ticket</th>
+                            <th>Symbol</th>
+                            <th>Type</th>
+                            <th>Volume</th>
+                            <th>Price</th>
+                            <th>SL</th>
+                            <th>TP</th>
+                            <th>Time (UTC)</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var order in _snapshot.Orders)
+                        {
+                            <tr>
+                                <td>@order.Ticket</td>
+                                <td>@order.Symbol</td>
+                                <td>@order.Type</td>
+                                <td>@order.Volume</td>
+                                <td>@order.Price</td>
+                                <td>@order.StopLoss</td>
+                                <td>@order.TakeProfit</td>
+                                <td>@order.TimeUtc.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+    </section>
+}
+
+@code {
+    [Parameter]
+    public string? SourceId { get; set; }
+
+    private MtSnapshot? _snapshot;
+    private bool _isLoading;
+    private string? _error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        _snapshot = null;
+        _error = null;
+
+        if (string.IsNullOrWhiteSpace(SourceId))
+        {
+            return;
+        }
+
+        _isLoading = true;
+        try
+        {
+            _snapshot = await ApiClient.GetLatestSnapshotAsync(SourceId);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Unable to load dashboard data: {ex.Message}";
+        }
+        finally
+        {
+            _isLoading = false;
+        }
+    }
+}
