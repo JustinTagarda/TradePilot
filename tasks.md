@@ -437,7 +437,7 @@ GET /v1/mt/sources/{sourceId}/latest
 ### TASK 006
 Create Connector project.
 
-Status: TODO
+Status: DONE
 
 Endpoints:
 
