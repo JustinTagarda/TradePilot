@@ -1,0 +1,43 @@
+@TradePilot.Api_HostAddress = http://localhost:5261
+
+GET {{TradePilot.Api_HostAddress}}/health
+Accept: application/json
+
+###
+
+POST {{TradePilot.Api_HostAddress}}/v1/mt/snapshots
+Content-Type: application/json
+X-Source-Id: demo-source-01
+X-Timestamp: 1708500000
+X-Nonce: replace-with-unique-nonce
+X-Signature: replace-with-hex-or-base64-hmac
+
+{
+  "sourceId": "demo-source-01",
+  "timestampUtc": "2026-02-21T09:00:00Z",
+  "account": {
+    "broker": "Demo Broker",
+    "server": "Demo-Server",
+    "login": 1234567,
+    "currency": "USD",
+    "balance": 10000.0,
+    "equity": 10025.5,
+    "margin": 100.0,
+    "freeMargin": 9925.5,
+    "marginLevel": 10025.5
+  },
+  "positions": [],
+  "orders": []
+}
+
+###
+
+GET {{TradePilot.Api_HostAddress}}/v1/mt/sources
+Accept: application/json
+
+###
+
+GET {{TradePilot.Api_HostAddress}}/v1/mt/sources/demo-source-01/latest
+Accept: application/json
+
+###
