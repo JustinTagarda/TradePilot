@@ -22,13 +22,16 @@
 - Historical snapshot storage
 - Retention policy
 - History endpoints
+- Status: Implemented
 
 ### Realtime
 - SignalR hub for source update push
 - Web subscription client
 - Polling fallback mode
+- Status: Implemented
 
 ### Deployment
 - Environment-specific config strategy
 - Managed secret handling
 - Azure deployment profile and runbook
+- Status: Baseline implemented

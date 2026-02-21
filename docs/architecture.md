@@ -40,9 +40,13 @@ TradePilot is a read-only monitoring stack for MetaTrader 5 account data:
   - `POST /v1/mt/snapshots`
   - `GET /v1/mt/sources`
   - `GET /v1/mt/sources/{sourceId}/latest`
+  - `GET /v1/mt/sources/{sourceId}/history`
+  - `Hub /hubs/mt` (SignalR)
 - Responsibilities:
   - Validate HMAC on ingest.
   - Store latest snapshot in memory per `sourceId`.
+  - Persist snapshot history to SQLite with retention cleanup.
+  - Push source update notifications to SignalR clients.
   - Serve list of sources and latest snapshot for UI.
 
 ### Web UI (`src/TradePilot.Web`)
@@ -50,10 +54,12 @@ TradePilot is a read-only monitoring stack for MetaTrader 5 account data:
 - API client service calls:
   - `GET /v1/mt/sources`
   - `GET /v1/mt/sources/{sourceId}/latest`
+- Realtime behavior:
+  - SignalR subscription to `/hubs/mt` per source
+  - Polling fallback every `2` seconds when SignalR is unavailable
 - Pages:
   - Sources
   - Dashboard
-- Dashboard refreshes data via polling every `2` seconds.
 
 ## Data Contract Summary
 

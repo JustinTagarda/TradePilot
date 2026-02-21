@@ -40,6 +40,8 @@ Example:
 }
 ```
 
+Production baseline is in `src/TradePilot.Api/appsettings.Production.json`.
+
 ### Connector (`src/TradePilot.Connector/appsettings.json`)
 
 Set:
@@ -71,6 +73,8 @@ Example:
 }
 ```
 
+Production baseline is in `src/TradePilot.Connector/appsettings.Production.json`.
+
 ### Web UI (`src/TradePilot.Web/wwwroot/appsettings.json`)
 
 Set API base URL:
@@ -80,6 +84,8 @@ Set API base URL:
   "BaseUrl": "http://localhost:5261"
 }
 ```
+
+Production baseline is in `src/TradePilot.Web/wwwroot/appsettings.Production.json`.
 
 ### MT5 EA Inputs (`mt5/TradePilotEA.mq5`)
 
@@ -130,3 +136,17 @@ Default development URLs:
 - API: `http://localhost:5261`
 - Connector: `http://localhost:5138`
 - Web: `http://localhost:5288`
+
+## Cloud Deployment Baseline
+
+Azure deployment profile template:
+
+- `infra/azure/deployment.profile.sample.json`
+
+Deployment script:
+
+- `scripts/deploy-azure.ps1`
+
+Runbook:
+
+- `docs/deployment-azure.md`

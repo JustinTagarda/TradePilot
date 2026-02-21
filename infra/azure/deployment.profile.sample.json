@@ -1,0 +1,35 @@
+{
+  "environment": "Staging",
+  "location": "eastus",
+  "resourceGroup": "rg-tradepilot-staging",
+  "api": {
+    "appName": "tradepilot-api-staging",
+    "appServicePlanName": "asp-tradepilot-staging",
+    "sku": "B1",
+    "runtime": "DOTNET|8.0",
+    "persistenceConnectionString": "Data Source=/home/site/wwwroot/tradepilot.db",
+    "retentionDays": 30,
+    "allowedOrigins": [
+      "https://tradepilotwebstaging.z13.web.core.windows.net"
+    ]
+  },
+  "web": {
+    "storageAccountName": "tradepilotwebstaging",
+    "indexDocument": "index.html",
+    "errorDocument": "index.html",
+    "apiBaseUrl": "https://tradepilot-api-staging.azurewebsites.net"
+  },
+  "keyVault": {
+    "name": "kv-tradepilot-staging",
+    "references": [
+      {
+        "settingName": "Security__Hmac__SharedSecret",
+        "secretName": "api-hmac-shared-secret"
+      },
+      {
+        "settingName": "Security__Hmac__SourceSecrets__demo-source-01",
+        "secretName": "api-source-demo-01-secret"
+      }
+    ]
+  }
+}

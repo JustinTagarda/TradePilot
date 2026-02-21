@@ -482,3 +482,5 @@ $RECYCLE.BIN/
 *.swp
 
 /tasks.md
+infra/azure/deployment.profile.json
+infra/azure/*.local.json
