@@ -51,3 +51,14 @@ GET http://localhost:5261/v1/mt/sources/{sourceId}/latest
 - Dashboard values match MT5 account state.
 - Dashboard updates approximately every 2 seconds.
 - No trade actions are available (read-only mode).
+
+## Automated Local E2E Check
+
+Run:
+
+```powershell
+pwsh -NoLogo -NoProfile -ExecutionPolicy Bypass -File scripts/e2e-local-test.ps1
+```
+
+Result artifact:
+- `docs/e2e-local-test-results.md`
