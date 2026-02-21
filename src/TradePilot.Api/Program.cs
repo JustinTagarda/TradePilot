@@ -119,3 +119,7 @@ mtGroup.MapGet("/sources/{sourceId}/latest", (string sourceId, ISnapshotStore sn
 .WithOpenApi();
 
 app.Run();
+
+public partial class Program
+{
+}
