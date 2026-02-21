@@ -471,7 +471,7 @@ Use Serilog.
 ### TASK 008
 Create Blazor Web project.
 
-Status: TODO
+Status: DONE
 
 Basic layout
 API client service.
