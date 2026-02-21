@@ -2,6 +2,7 @@ using Serilog;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using TradePilot.Api.Persistence;
+using TradePilot.Api.Realtime;
 using TradePilot.Api.Security;
 using TradePilot.Api.Snapshots;
 using TradePilot.Shared.Models;
@@ -36,12 +37,38 @@ builder.Services.AddSingleton<INonceReplayGuard, MemoryNonceReplayGuard>();
 builder.Services.AddSingleton<IMtHmacValidator, MtHmacValidator>();
 builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
 builder.Services.AddSingleton<ISnapshotHistoryStore, SqliteSnapshotHistoryStore>();
+builder.Services.AddSingleton<IMtSnapshotNotifier, SignalRMtSnapshotNotifier>();
+builder.Services.AddSignalR();
+var allowedOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("WebClient", policy =>
+    {
+        if (allowedOrigins.Length > 0)
+        {
+            policy
+                .WithOrigins(allowedOrigins)
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .AllowCredentials();
+        }
+        else
+        {
+            policy
+                .AllowAnyHeader()
+                .AllowAnyMethod()
+                .SetIsOriginAllowed(_ => true)
+                .AllowCredentials();
+        }
+    });
+});
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
 app.UseSerilogRequestLogging();
+app.UseCors("WebClient");
 app.UseSwagger();
 app.UseSwaggerUI();
 
@@ -87,6 +114,7 @@ mtGroup.MapPost("/snapshots", async (
     MtSnapshot snapshot,
     ISnapshotStore snapshotStore,
     ISnapshotHistoryStore snapshotHistoryStore,
+    IMtSnapshotNotifier snapshotNotifier,
     CancellationToken cancellationToken) =>
 {
     var authenticatedSourceId = context.Items[HmacHttpContextItemKeys.AuthenticatedSourceId] as string;
@@ -110,6 +138,7 @@ mtGroup.MapPost("/snapshots", async (
 
     snapshotStore.Upsert(snapshot);
     await snapshotHistoryStore.PersistAsync(snapshot, cancellationToken);
+    await snapshotNotifier.NotifySnapshotUpdatedAsync(snapshot, cancellationToken);
     return Results.Accepted($"/v1/mt/sources/{snapshot.SourceId}/latest");
 })
 .WithName("IngestSnapshot")
@@ -150,6 +179,8 @@ mtGroup.MapGet("/sources/{sourceId}/history", async (
 })
 .WithName("GetSnapshotHistoryBySource")
 .WithOpenApi();
+
+app.MapHub<MtSnapshotsHub>("/hubs/mt");
 
 await EnsurePersistenceDatabaseCreatedAsync(app);
 app.Run();

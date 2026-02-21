@@ -1,11 +1,26 @@
 @page "/dashboard"
 @page "/dashboard/{SourceId}"
 @implements IAsyncDisposable
+@inject IMtApiClient ApiClient
 @inject ISnapshotPollingService PollingService
+@inject HttpClient ApiHttpClient
+
+@using Microsoft.AspNetCore.SignalR.Client
 
 <PageTitle>Dashboard</PageTitle>
 
 <h1>Dashboard</h1>
+
+@if (!string.IsNullOrWhiteSpace(SourceId))
+{
+    <p class="text-muted">
+        Update mode: <strong>@_updateMode</strong>
+        @if (!string.IsNullOrWhiteSpace(_updateModeDetail))
+        {
+            <span> (@_updateModeDetail)</span>
+        }
+    </p>
+}
 
 @if (string.IsNullOrWhiteSpace(SourceId))
 {
@@ -140,14 +155,23 @@ else
     private MtSnapshot? _snapshot;
     private bool _isLoading;
     private string? _error;
+    private string _updateMode = "Idle";
+    private string? _updateModeDetail;
+
+    private CancellationTokenSource? _sessionCts;
     private CancellationTokenSource? _pollingCts;
     private Task? _pollingTask;
+    private HubConnection? _hubConnection;
+    private readonly SemaphoreSlim _snapshotRefreshGate = new(1, 1);
 
     protected override async Task OnParametersSetAsync()
     {
-        await StopPollingAsync();
+        await StopStreamingAsync();
+
         _snapshot = null;
         _error = null;
+        _updateMode = "Idle";
+        _updateModeDetail = null;
 
         if (string.IsNullOrWhiteSpace(SourceId))
         {
@@ -156,16 +180,141 @@ else
         }
 
         _isLoading = true;
-        _pollingCts = new CancellationTokenSource();
-        _pollingTask = PollingService.PollLatestSnapshotAsync(
-            SourceId,
-            PollingInterval,
-            OnSnapshotAsync,
-            OnPollingErrorAsync,
-            _pollingCts.Token);
+        _sessionCts = new CancellationTokenSource();
+
+        await RefreshLatestSnapshotAsync(SourceId, _sessionCts.Token);
+        if (_sessionCts.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await StartRealtimeAsync(SourceId, _sessionCts.Token);
     }
 
-    private Task OnSnapshotAsync(MtSnapshot? snapshot)
+    private async Task StartRealtimeAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await SetUpdateModeAsync("SignalR (connecting)", null);
+
+        var connection = new HubConnectionBuilder()
+            .WithUrl(BuildHubUri())
+            .WithAutomaticReconnect()
+            .Build();
+
+        connection.On<MtSnapshotUpdate>("SnapshotUpdated", update => OnSnapshotUpdatedAsync(sourceId, update, cancellationToken));
+        connection.Reconnecting += error => OnRealtimeReconnectingAsync(sourceId, error);
+        connection.Reconnected += _ => OnRealtimeReconnectedAsync(sourceId, cancellationToken);
+        connection.Closed += error => OnRealtimeClosedAsync(sourceId, error, cancellationToken);
+
+        _hubConnection = connection;
+
+        try
+        {
+            await connection.StartAsync(cancellationToken);
+            await connection.SendAsync("SubscribeSource", sourceId, cancellationToken);
+            await StopPollingAsync();
+            await SetUpdateModeAsync("SignalR (connected)", null);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            await SetUpdateModeAsync("Polling fallback", $"SignalR unavailable: {ex.Message}");
+            await StartPollingAsync(sourceId, cancellationToken);
+        }
+    }
+
+    private Task OnSnapshotUpdatedAsync(string sourceId, MtSnapshotUpdate update, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.CompletedTask;
+        }
+
+        if (!string.Equals(update.SourceId, sourceId, StringComparison.OrdinalIgnoreCase))
+        {
+            return Task.CompletedTask;
+        }
+
+        return RefreshLatestSnapshotAsync(sourceId, cancellationToken);
+    }
+
+    private async Task OnRealtimeReconnectingAsync(string sourceId, Exception? error)
+    {
+        if (_sessionCts?.IsCancellationRequested ?? true)
+        {
+            return;
+        }
+
+        await SetUpdateModeAsync("Polling fallback", $"SignalR reconnecting: {error?.Message ?? "connection lost"}");
+        await StartPollingAsync(sourceId, _sessionCts.Token);
+    }
+
+    private async Task OnRealtimeReconnectedAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested || _hubConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            await _hubConnection.SendAsync("SubscribeSource", sourceId, cancellationToken);
+            await StopPollingAsync();
+            await SetUpdateModeAsync("SignalR (connected)", null);
+            await RefreshLatestSnapshotAsync(sourceId, cancellationToken);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            await SetUpdateModeAsync("Polling fallback", $"SignalR re-subscribe failed: {ex.Message}");
+            await StartPollingAsync(sourceId, cancellationToken);
+        }
+    }
+
+    private async Task OnRealtimeClosedAsync(string sourceId, Exception? error, CancellationToken cancellationToken)
+    {
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return;
+        }
+
+        await SetUpdateModeAsync("Polling fallback", $"SignalR disconnected: {error?.Message ?? "closed"}");
+        await StartPollingAsync(sourceId, cancellationToken);
+    }
+
+    private Uri BuildHubUri()
+    {
+        var baseAddress = ApiHttpClient.BaseAddress;
+        if (baseAddress is null)
+        {
+            throw new InvalidOperationException("API base address is not configured.");
+        }
+
+        return new Uri(baseAddress, "hubs/mt");
+    }
+
+    private Task StartPollingAsync(string sourceId, CancellationToken sessionToken)
+    {
+        if (_pollingCts is not null)
+        {
+            return Task.CompletedTask;
+        }
+
+        _pollingCts = CancellationTokenSource.CreateLinkedTokenSource(sessionToken);
+        _pollingTask = PollingService.PollLatestSnapshotAsync(
+            sourceId,
+            PollingInterval,
+            OnPollingSnapshotAsync,
+            OnPollingErrorAsync,
+            _pollingCts.Token);
+
+        return Task.CompletedTask;
+    }
+
+    private Task OnPollingSnapshotAsync(MtSnapshot? snapshot)
     {
         return InvokeAsync(() =>
         {
@@ -182,6 +331,48 @@ else
         {
             _error = $"Unable to load dashboard data: {exception.Message}";
             _isLoading = false;
+            StateHasChanged();
+        });
+    }
+
+    private async Task RefreshLatestSnapshotAsync(string sourceId, CancellationToken cancellationToken)
+    {
+        await _snapshotRefreshGate.WaitAsync(cancellationToken);
+        try
+        {
+            var snapshot = await ApiClient.GetLatestSnapshotAsync(sourceId, cancellationToken);
+            await InvokeAsync(() =>
+            {
+                _snapshot = snapshot;
+                _error = null;
+                _isLoading = false;
+                StateHasChanged();
+            });
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex)
+        {
+            await InvokeAsync(() =>
+            {
+                _error = $"Unable to load dashboard data: {ex.Message}";
+                _isLoading = false;
+                StateHasChanged();
+            });
+        }
+        finally
+        {
+            _snapshotRefreshGate.Release();
+        }
+    }
+
+    private Task SetUpdateModeAsync(string mode, string? detail)
+    {
+        return InvokeAsync(() =>
+        {
+            _updateMode = mode;
+            _updateModeDetail = detail;
             StateHasChanged();
         });
     }
@@ -210,8 +401,48 @@ else
         _pollingTask = null;
     }
 
+    private async Task StopRealtimeAsync()
+    {
+        if (_hubConnection is null)
+        {
+            return;
+        }
+
+        try
+        {
+            if (!string.IsNullOrWhiteSpace(SourceId))
+            {
+                await _hubConnection.SendAsync("UnsubscribeSource", SourceId);
+            }
+        }
+        catch
+        {
+        }
+
+        await _hubConnection.DisposeAsync();
+        _hubConnection = null;
+    }
+
+    private async Task StopStreamingAsync()
+    {
+        if (_sessionCts is not null)
+        {
+            _sessionCts.Cancel();
+        }
+
+        await StopPollingAsync();
+        await StopRealtimeAsync();
+
+        if (_sessionCts is not null)
+        {
+            _sessionCts.Dispose();
+            _sessionCts = null;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
-        await StopPollingAsync();
+        await StopStreamingAsync();
+        _snapshotRefreshGate.Dispose();
     }
 }
