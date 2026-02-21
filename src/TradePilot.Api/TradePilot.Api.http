@@ -41,3 +41,8 @@ GET {{TradePilot.Api_HostAddress}}/v1/mt/sources/demo-source-01/latest
 Accept: application/json
 
 ###
+
+GET {{TradePilot.Api_HostAddress}}/v1/mt/sources/demo-source-01/history?take=50
+Accept: application/json
+
+###

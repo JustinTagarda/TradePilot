@@ -85,6 +85,13 @@ public sealed class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
         var latestSnapshot = await latestResponse.Content.ReadFromJsonAsync<MtSnapshot>(TradePilotJson.Default);
         Assert.NotNull(latestSnapshot);
         Assert.Equal(sourceId, latestSnapshot!.SourceId);
+
+        var historyResponse = await client.GetAsync($"/v1/mt/sources/{sourceId}/history?take=10");
+        Assert.Equal(HttpStatusCode.OK, historyResponse.StatusCode);
+        var history = await historyResponse.Content.ReadFromJsonAsync<List<MtSnapshot>>(TradePilotJson.Default);
+        Assert.NotNull(history);
+        Assert.NotEmpty(history!);
+        Assert.Equal(sourceId, history![0].SourceId);
     }
 
     private sealed class WebSourceSummary
@@ -97,6 +104,7 @@ public sealed class ApiEndpointsTests : IClassFixture<ApiWebApplicationFactory>
 public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
 {
     public const string SourceSecret = "api-integration-secret";
+    private readonly string _databasePath = Path.Combine(Path.GetTempPath(), $"tradepilot-tests-{Guid.NewGuid():N}.db");
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -106,9 +114,47 @@ public sealed class ApiWebApplicationFactory : WebApplicationFactory<Program>
             {
                 ["Security:Hmac:AllowedClockSkewSeconds"] = "300",
                 ["Security:Hmac:SharedSecret"] = "",
-                ["Security:Hmac:SourceSecrets:demo-source-01"] = SourceSecret
+                ["Security:Hmac:SourceSecrets:demo-source-01"] = SourceSecret,
+                ["Persistence:Enabled"] = "true",
+                ["Persistence:ConnectionString"] = $"Data Source={_databasePath}",
+                ["Persistence:RetentionDays"] = "30"
             };
             configBuilder.AddInMemoryCollection(inMemorySettings);
         });
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        base.Dispose(disposing);
+
+        if (!File.Exists(_databasePath))
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < 5; attempt++)
+        {
+            try
+            {
+                File.Delete(_databasePath);
+                return;
+            }
+            catch (IOException) when (attempt < 4)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+            catch (UnauthorizedAccessException) when (attempt < 4)
+            {
+                System.Threading.Thread.Sleep(100);
+            }
+            catch (IOException)
+            {
+                return;
+            }
+            catch (UnauthorizedAccessException)
+            {
+                return;
+            }
+        }
     }
 }

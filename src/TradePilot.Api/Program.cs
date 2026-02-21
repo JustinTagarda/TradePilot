@@ -1,4 +1,7 @@
 using Serilog;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
+using TradePilot.Api.Persistence;
 using TradePilot.Api.Security;
 using TradePilot.Api.Snapshots;
 using TradePilot.Shared.Models;
@@ -21,11 +24,18 @@ builder.Services.ConfigureHttpJsonOptions(options =>
     options.SerializerOptions.DefaultIgnoreCondition = TradePilotJson.Default.DefaultIgnoreCondition;
     options.SerializerOptions.WriteIndented = TradePilotJson.Default.WriteIndented;
 });
+builder.Services.Configure<PersistenceOptions>(builder.Configuration.GetSection(PersistenceOptions.SectionName));
+builder.Services.AddDbContextFactory<TradePilotDbContext>((serviceProvider, dbContextOptions) =>
+{
+    var options = serviceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    dbContextOptions.UseSqlite(options.ConnectionString);
+});
 builder.Services.Configure<HmacValidationOptions>(builder.Configuration.GetSection(HmacValidationOptions.SectionName));
 builder.Services.AddSingleton<ISourceSecretProvider, ConfigurationSourceSecretProvider>();
 builder.Services.AddSingleton<INonceReplayGuard, MemoryNonceReplayGuard>();
 builder.Services.AddSingleton<IMtHmacValidator, MtHmacValidator>();
 builder.Services.AddSingleton<ISnapshotStore, InMemorySnapshotStore>();
+builder.Services.AddSingleton<ISnapshotHistoryStore, SqliteSnapshotHistoryStore>();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
@@ -72,7 +82,12 @@ app.MapGet("/health", () => Results.Ok(new
 
 var mtGroup = app.MapGroup("/v1/mt");
 
-mtGroup.MapPost("/snapshots", (HttpContext context, MtSnapshot snapshot, ISnapshotStore snapshotStore) =>
+mtGroup.MapPost("/snapshots", async (
+    HttpContext context,
+    MtSnapshot snapshot,
+    ISnapshotStore snapshotStore,
+    ISnapshotHistoryStore snapshotHistoryStore,
+    CancellationToken cancellationToken) =>
 {
     var authenticatedSourceId = context.Items[HmacHttpContextItemKeys.AuthenticatedSourceId] as string;
 
@@ -94,6 +109,7 @@ mtGroup.MapPost("/snapshots", (HttpContext context, MtSnapshot snapshot, ISnapsh
     }
 
     snapshotStore.Upsert(snapshot);
+    await snapshotHistoryStore.PersistAsync(snapshot, cancellationToken);
     return Results.Accepted($"/v1/mt/sources/{snapshot.SourceId}/latest");
 })
 .WithName("IngestSnapshot")
@@ -118,7 +134,40 @@ mtGroup.MapGet("/sources/{sourceId}/latest", (string sourceId, ISnapshotStore sn
 .WithName("GetLatestSnapshotBySource")
 .WithOpenApi();
 
+mtGroup.MapGet("/sources/{sourceId}/history", async (
+    string sourceId,
+    int? take,
+    ISnapshotHistoryStore snapshotHistoryStore,
+    CancellationToken cancellationToken) =>
+{
+    if (string.IsNullOrWhiteSpace(sourceId))
+    {
+        return Results.BadRequest(new { error = "sourceId is required." });
+    }
+
+    var history = await snapshotHistoryStore.GetHistoryAsync(sourceId, take, cancellationToken);
+    return Results.Ok(history);
+})
+.WithName("GetSnapshotHistoryBySource")
+.WithOpenApi();
+
+await EnsurePersistenceDatabaseCreatedAsync(app);
 app.Run();
+
+static async Task EnsurePersistenceDatabaseCreatedAsync(WebApplication app)
+{
+    using var scope = app.Services.CreateScope();
+    var options = scope.ServiceProvider.GetRequiredService<IOptions<PersistenceOptions>>().Value;
+    if (!options.Enabled)
+    {
+        return;
+    }
+
+    await using var dbContext = await scope.ServiceProvider
+        .GetRequiredService<IDbContextFactory<TradePilotDbContext>>()
+        .CreateDbContextAsync();
+    await dbContext.Database.EnsureCreatedAsync();
+}
 
 public partial class Program
 {
