@@ -1,4 +1,5 @@
 using Microsoft.Extensions.Options;
+using Serilog;
 using TradePilot.Connector.Configuration;
 using TradePilot.Connector.Forwarding;
 using TradePilot.Connector.Security;
@@ -6,6 +7,14 @@ using TradePilot.Shared.Models;
 using TradePilot.Shared.Serialization;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Host.UseSerilog((context, services, configuration) =>
+{
+    configuration
+        .ReadFrom.Configuration(context.Configuration)
+        .ReadFrom.Services(services)
+        .Enrich.FromLogContext();
+});
 
 builder.Services.ConfigureHttpJsonOptions(options =>
 {
@@ -35,6 +44,7 @@ builder.Services.AddSwaggerGen();
 
 var app = builder.Build();
 
+app.UseSerilogRequestLogging();
 app.UseSwagger();
 app.UseSwaggerUI();
 

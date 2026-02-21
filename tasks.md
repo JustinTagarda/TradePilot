@@ -462,7 +462,7 @@ Inbound source secret map (or a shared inbound secret for MVP)
 ### TASK 007
 Add structured logging.
 
-Status: TODO
+Status: DONE
 
 Use Serilog.
 
