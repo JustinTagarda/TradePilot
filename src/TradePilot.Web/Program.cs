@@ -18,5 +18,6 @@ builder.Services.AddScoped(sp => new HttpClient
     BaseAddress = new Uri(apiBaseUrl, UriKind.Absolute)
 });
 builder.Services.AddScoped<IMtApiClient, MtApiClient>();
+builder.Services.AddScoped<ISnapshotPollingService, SnapshotPollingService>();
 
 await builder.Build().RunAsync();

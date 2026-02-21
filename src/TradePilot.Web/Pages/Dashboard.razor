@@ -1,6 +1,7 @@
 @page "/dashboard"
 @page "/dashboard/{SourceId}"
-@inject IMtApiClient ApiClient
+@implements IAsyncDisposable
+@inject ISnapshotPollingService PollingService
 
 <PageTitle>Dashboard</PageTitle>
 
@@ -131,35 +132,86 @@ else
 }
 
 @code {
+    private static readonly TimeSpan PollingInterval = TimeSpan.FromSeconds(2);
+
     [Parameter]
     public string? SourceId { get; set; }
 
     private MtSnapshot? _snapshot;
     private bool _isLoading;
     private string? _error;
+    private CancellationTokenSource? _pollingCts;
+    private Task? _pollingTask;
 
     protected override async Task OnParametersSetAsync()
     {
+        await StopPollingAsync();
         _snapshot = null;
         _error = null;
 
         if (string.IsNullOrWhiteSpace(SourceId))
         {
+            _isLoading = false;
             return;
         }
 
         _isLoading = true;
-        try
+        _pollingCts = new CancellationTokenSource();
+        _pollingTask = PollingService.PollLatestSnapshotAsync(
+            SourceId,
+            PollingInterval,
+            OnSnapshotAsync,
+            OnPollingErrorAsync,
+            _pollingCts.Token);
+    }
+
+    private Task OnSnapshotAsync(MtSnapshot? snapshot)
+    {
+        return InvokeAsync(() =>
         {
-            _snapshot = await ApiClient.GetLatestSnapshotAsync(SourceId);
-        }
-        catch (Exception ex)
-        {
-            _error = $"Unable to load dashboard data: {ex.Message}";
-        }
-        finally
-        {
+            _snapshot = snapshot;
+            _error = null;
             _isLoading = false;
+            StateHasChanged();
+        });
+    }
+
+    private Task OnPollingErrorAsync(Exception exception)
+    {
+        return InvokeAsync(() =>
+        {
+            _error = $"Unable to load dashboard data: {exception.Message}";
+            _isLoading = false;
+            StateHasChanged();
+        });
+    }
+
+    private async Task StopPollingAsync()
+    {
+        if (_pollingCts is null)
+        {
+            return;
         }
+
+        _pollingCts.Cancel();
+        if (_pollingTask is not null)
+        {
+            try
+            {
+                await _pollingTask;
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        _pollingCts.Dispose();
+        _pollingCts = null;
+        _pollingTask = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        await StopPollingAsync();
     }
 }
